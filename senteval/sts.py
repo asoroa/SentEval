@@ -80,8 +80,9 @@ class STSEval(object):
                         sys_score = self.similarity(enc1[kk], enc2[kk])
                         sys_scores_ordered.append(sys_score)
 
-            sys_scores = [y for (x,y) in sorted(enumerate(sys_scores_ordered),
-                                                key=lambda z: sorted_indices[z[0]])]
+            sys_scores = [None] * len(sys_scores_ordered)
+            for (i, v) in enumerate(sys_scores_ordered):
+                sys_scores[sorted_indices[i]] = v.item()
             results[dataset] = {'pearson': pearsonr(sys_scores_ordered, gs_scores),
                                 'spearman': spearmanr(sys_scores_ordered, gs_scores),
                                 'nsamples': len(sys_scores),
