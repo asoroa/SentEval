@@ -27,7 +27,9 @@ class STSEval(object):
     def loadFile(self, fpath):
         self.data = {}
         self.samples = []
-
+        self.metadata = {}
+        self.metadata['test_files'] = {}
+        self.metadata['comment'] = "Empty lines do not count."
         for dataset in self.datasets:
             sent1, sent2 = zip(*[l.split("\t") for l in
                                io.open(fpath + '/STS.input.%s.txt' % dataset,
@@ -36,17 +38,21 @@ class STSEval(object):
                                    io.open(fpath + '/STS.gs.%s.txt' % dataset,
                                            encoding='utf8')
                                    .read().splitlines()])
+            self.metadata['test_files'][dataset] = [fpath + '/STS.gs.%s.txt' % dataset]
             not_empty_idx = raw_scores != ''
 
             gs_scores = [float(x) for x in raw_scores[not_empty_idx]]
             sent1 = np.array([s.split() for s in sent1])[not_empty_idx]
             sent2 = np.array([s.split() for s in sent2])[not_empty_idx]
             # sort data by length to minimize padding in batcher
-            sorted_data = sorted(zip(sent1, sent2, gs_scores),
-                                 key=lambda z: (len(z[0]), len(z[1]), z[2]))
-            sent1, sent2, gs_scores = map(list, zip(*sorted_data))
+            zipped_data = sorted(enumerate(zip(sent1, sent2, gs_scores)),
+                                 key=lambda z: (len(z[1][0]), len(z[1][1]), z[1][2]))
+            sorted_indices = [i for (i, z) in zipped_data]
+            sent1 = [x for (i, (x,y,z)) in zipped_data]
+            sent2 = [y for (i, (x,y,z)) in zipped_data]
+            gs_scores = [z for (i, (x,y,z)) in zipped_data]
 
-            self.data[dataset] = (sent1, sent2, gs_scores)
+            self.data[dataset] = (sent1, sent2, gs_scores, sorted_indices)
             self.samples += sent1 + sent2
 
     def do_prepare(self, params, prepare):
@@ -59,8 +65,8 @@ class STSEval(object):
     def run(self, params, batcher):
         results = {}
         for dataset in self.datasets:
-            sys_scores = []
-            input1, input2, gs_scores = self.data[dataset]
+            sys_scores_ordered = []
+            input1, input2, gs_scores, sorted_indices = self.data[dataset]
             for ii in range(0, len(gs_scores), params.batch_size):
                 batch1 = input1[ii:ii + params.batch_size]
                 batch2 = input2[ii:ii + params.batch_size]
@@ -72,11 +78,15 @@ class STSEval(object):
 
                     for kk in range(enc2.shape[0]):
                         sys_score = self.similarity(enc1[kk], enc2[kk])
-                        sys_scores.append(sys_score)
+                        sys_scores_ordered.append(sys_score)
 
-            results[dataset] = {'pearson': pearsonr(sys_scores, gs_scores),
-                                'spearman': spearmanr(sys_scores, gs_scores),
-                                'nsamples': len(sys_scores)}
+            sys_scores = [y for (x,y) in sorted(enumerate(sys_scores_ordered),
+                                                key=lambda z: sorted_indices[z[0]])]
+            results[dataset] = {'pearson': pearsonr(sys_scores_ordered, gs_scores),
+                                'spearman': spearmanr(sys_scores_ordered, gs_scores),
+                                'nsamples': len(sys_scores),
+                                'yhat' : sys_scores,
+                                'metadata' : { 'test_files' : self.metadata['test_files'][dataset]}}
             logging.debug('%s : pearson = %.4f, spearman = %.4f' %
                           (dataset, results[dataset]['pearson'][0],
                            results[dataset]['spearman'][0]))
@@ -156,6 +166,8 @@ class STSBenchmarkEval(SICKRelatednessEval):
         train = self.loadFile(os.path.join(task_path, 'sts-train.csv'))
         dev = self.loadFile(os.path.join(task_path, 'sts-dev.csv'))
         test = self.loadFile(os.path.join(task_path, 'sts-test.csv'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'sts-test.csv')]
         self.sick_data = {'train': train, 'dev': dev, 'test': test}
 
     def loadFile(self, fpath):

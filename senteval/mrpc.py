@@ -28,6 +28,9 @@ class MRPCEval(object):
                               'msr_paraphrase_train.txt'))
         test = self.loadFile(os.path.join(task_path,
                              'msr_paraphrase_test.txt'))
+        self.metadata = {}
+        self.metadata['test_files'] = os.path.join(task_path,
+                             'msr_paraphrase_test.txt')
         self.mrpc_data = {'train': train, 'test': test}
 
     def do_prepare(self, params, prepare):
@@ -58,14 +61,16 @@ class MRPCEval(object):
             logging.info('Computing embedding for {0}'.format(key))
             # Sort to reduce padding
             text_data = {}
-            sorted_corpus = sorted(zip(self.mrpc_data[key]['X_A'],
-                                       self.mrpc_data[key]['X_B'],
-                                       self.mrpc_data[key]['y']),
-                                   key=lambda z: (len(z[0]), len(z[1]), z[2]))
+            zipped_corpus = sorted(enumerate(zip(self.mrpc_data[key]['X_A'],
+                                                 self.mrpc_data[key]['X_B'],
+                                                 self.mrpc_data[key]['y'])),
+                                   key=lambda z: (len(z[1][0]), len(z[1][1]), z[1][2]))
 
-            text_data['A'] = [x for (x, y, z) in sorted_corpus]
-            text_data['B'] = [y for (x, y, z) in sorted_corpus]
-            text_data['y'] = [z for (x, y, z) in sorted_corpus]
+            if key == 'test':
+                sorted_test_indices = [i for (i, z) in zipped_corpus]
+            text_data['A'] = [x for (i, (x, y, z)) in zipped_corpus]
+            text_data['B'] = [y for (i, (x, y, z)) in zipped_corpus]
+            text_data['y'] = [z for (i, (x, y, z)) in zipped_corpus]
 
             for txt_type in ['A', 'B']:
                 mrpc_embed[key][txt_type] = []
@@ -96,9 +101,15 @@ class MRPCEval(object):
         clf = KFoldClassifier(train={'X': trainF, 'y': trainY},
                               test={'X': testF, 'y': testY}, config=config)
 
-        devacc, testacc, yhat = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y
+
         testf1 = round(100*f1_score(testY, yhat), 2)
         logging.debug('Dev acc : {0} Test acc {1}; Test F1 {2} for MRPC.\n'
                       .format(devacc, testacc, testf1))
         return {'devacc': devacc, 'acc': testacc, 'f1': testf1,
-                'ndev': len(trainA), 'ntest': len(testA)}
+                'ndev': len(trainA), 'ntest': len(testA),
+                'metadata': self.metadata,
+                'yhat': yhat }

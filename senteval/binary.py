@@ -37,10 +37,11 @@ class BinaryClassifierEval(object):
     def run(self, params, batcher):
         enc_input = []
         # Sort to reduce padding
-        sorted_corpus = sorted(zip(self.samples, self.labels),
-                               key=lambda z: (len(z[0]), z[1]))
-        sorted_samples = [x for (x, y) in sorted_corpus]
-        sorted_labels = [y for (x, y) in sorted_corpus]
+        zipped_data = sorted(enumerate(zip(self.samples, self.labels)),
+                             key=lambda z: (len(z[1][0]), z[1][1]))
+        sorted_indices = [i for (i, z) in zipped_data]
+        sorted_samples = [x for (i, (x, y)) in zipped_data]
+        sorted_labels = [y for (i, (x, y)) in zipped_data]
         logging.info('Generating sentence embeddings')
         for ii in range(0, self.n_samples, params.batch_size):
             batch = sorted_samples[ii:ii + params.batch_size]
@@ -54,10 +55,15 @@ class BinaryClassifierEval(object):
                   'classifier': params.classifier,
                   'nhid': params.nhid, 'kfold': params.kfold}
         clf = InnerKFoldClassifier(enc_input, np.array(sorted_labels), config)
-        devacc, testacc = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_indices[i]] = y
         logging.debug('Dev acc : {0} Test acc : {1}\n'.format(devacc, testacc))
         return {'devacc': devacc, 'acc': testacc, 'ndev': self.n_samples,
-                'ntest': self.n_samples}
+                'ntest': self.n_samples,
+                'metadata': self.metadata,
+                'yhat' : yhat}
 
 
 class CREval(BinaryClassifierEval):
@@ -65,6 +71,8 @@ class CREval(BinaryClassifierEval):
         logging.debug('***** Transfer task : CR *****\n\n')
         pos = self.loadFile(os.path.join(task_path, 'custrev.pos'))
         neg = self.loadFile(os.path.join(task_path, 'custrev.neg'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'custrev.pos'), os.path.join(task_path, 'custrev.neg')]
         super(self.__class__, self).__init__(pos, neg, seed)
 
 
@@ -73,6 +81,9 @@ class MREval(BinaryClassifierEval):
         logging.debug('***** Transfer task : MR *****\n\n')
         pos = self.loadFile(os.path.join(task_path, 'rt-polarity.pos'))
         neg = self.loadFile(os.path.join(task_path, 'rt-polarity.neg'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'rt-polarity.pos'), os.path.join(task_path, 'rt-polarity.neg')]
+
         super(self.__class__, self).__init__(pos, neg, seed)
 
 
@@ -81,6 +92,8 @@ class SUBJEval(BinaryClassifierEval):
         logging.debug('***** Transfer task : SUBJ *****\n\n')
         obj = self.loadFile(os.path.join(task_path, 'subj.objective'))
         subj = self.loadFile(os.path.join(task_path, 'subj.subjective'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'subj.objective'), os.path.join(task_path, 'subj.subjective')]
         super(self.__class__, self).__init__(obj, subj, seed)
 
 
@@ -89,4 +102,6 @@ class MPQAEval(BinaryClassifierEval):
         logging.debug('***** Transfer task : MPQA *****\n\n')
         pos = self.loadFile(os.path.join(task_path, 'mpqa.pos'))
         neg = self.loadFile(os.path.join(task_path, 'mpqa.neg'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'mpqa.pos'), os.path.join(task_path, 'mpqa.neg')]
         super(self.__class__, self).__init__(pos, neg, seed)

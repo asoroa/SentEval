@@ -64,6 +64,7 @@ class InnerKFoldClassifier(object):
         innerskf = StratifiedKFold(n_splits=self.k, shuffle=True,
                                    random_state=1111)
         count = 0
+        yhat = np.ndarray(np.shape(self.y))
         for train_idx, test_idx in skf.split(self.X, self.y):
             count += 1
             X_train, X_test = self.X[train_idx], self.X[test_idx]
@@ -100,11 +101,13 @@ class InnerKFoldClassifier(object):
                 clf = LogisticRegression(C=optreg, random_state=self.seed)
                 clf.fit(X_train, y_train)
 
+            yhat_batch = clf.predict(X_test)
+            yhat[test_idx] = np.squeeze(yhat_batch)
             self.testresults.append(round(100*clf.score(X_test, y_test), 2))
 
         devaccuracy = round(np.mean(self.devresults), 2)
         testaccuracy = round(np.mean(self.testresults), 2)
-        return devaccuracy, testaccuracy
+        return devaccuracy, testaccuracy, yhat
 
 
 class KFoldClassifier(object):
@@ -178,7 +181,7 @@ class KFoldClassifier(object):
         testaccuracy = clf.score(self.test['X'], self.test['y'])
         testaccuracy = round(100*testaccuracy, 2)
 
-        return devaccuracy, testaccuracy, yhat
+        return devaccuracy, testaccuracy, np.squeeze(yhat)
 
 
 class SplitClassifier(object):
@@ -241,6 +244,7 @@ class SplitClassifier(object):
             clf = LogisticRegression(C=optreg, random_state=self.seed)
             clf.fit(self.X['train'], self.y['train'])
 
+        yhat = clf.predict(self.X['test'])
         testaccuracy = clf.score(self.X['test'], self.y['test'])
         testaccuracy = round(100*testaccuracy, 2)
-        return devaccuracy, testaccuracy
+        return devaccuracy, testaccuracy, np.squeeze(yhat)

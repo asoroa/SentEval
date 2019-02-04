@@ -25,6 +25,8 @@ class TRECEval(object):
         self.seed = seed
         self.train = self.loadFile(os.path.join(task_path, 'train_5500.label'))
         self.test = self.loadFile(os.path.join(task_path, 'TREC_10.label'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'TREC_10.label')]
 
     def do_prepare(self, params, prepare):
         samples = self.train['X'] + self.test['X']
@@ -52,10 +54,11 @@ class TRECEval(object):
         train_samples = [x for (x, y) in sorted_corpus_train]
         train_labels = [y for (x, y) in sorted_corpus_train]
 
-        sorted_corpus_test = sorted(zip(self.test['X'], self.test['y']),
-                                    key=lambda z: (len(z[0]), z[1]))
-        test_samples = [x for (x, y) in sorted_corpus_test]
-        test_labels = [y for (x, y) in sorted_corpus_test]
+        zipped_corpus_test = sorted(enumerate(zip(self.test['X'], self.test['y'])),
+                                    key=lambda z: (len(z[1][0]), z[1][1]))
+        sorted_test_indices = [i for (i, z) in zipped_corpus_test]
+        test_samples = [x for (i, (x, y)) in zipped_corpus_test]
+        test_labels = [y for (i, (x, y)) in zipped_corpus_test]
 
         # Get train embeddings
         for ii in range(0, len(train_labels), params.batch_size):
@@ -82,8 +85,12 @@ class TRECEval(object):
                               {'X': test_embeddings,
                                'y': np.array(test_labels)},
                               config_classifier)
-        devacc, testacc, _ = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y
         logging.debug('\nDev acc : {0} Test acc : {1} \
             for TREC\n'.format(devacc, testacc))
         return {'devacc': devacc, 'acc': testacc,
-                'ndev': len(self.train['X']), 'ntest': len(self.test['X'])}
+                'ndev': len(self.train['X']), 'ntest': len(self.test['X']),
+                'yhat' : yhat, 'metadata': self.metadata }

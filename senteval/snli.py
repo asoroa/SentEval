@@ -39,6 +39,10 @@ class SNLIEval(object):
         test2 = self.loadFile(os.path.join(taskpath, 's2.test'))
         testlabels = io.open(os.path.join(taskpath, 'labels.test'),
                              encoding='utf-8').read().splitlines()
+        self.metadata={}
+        self.metadata['test_files'] = [os.path.join(taskpath, 's2.test'),
+                                       os.path.join(taskpath, 's1.test'),
+                                       os.path.join(taskpath, 'labels.test')]
 
         # sort data (by s2 first) to reduce padding
         sorted_train = sorted(zip(train2, train1, trainlabels),
@@ -49,9 +53,12 @@ class SNLIEval(object):
                               key=lambda z: (len(z[0]), len(z[1]), z[2]))
         valid2, valid1, validlabels = map(list, zip(*sorted_valid))
 
-        sorted_test = sorted(zip(test2, test1, testlabels),
-                             key=lambda z: (len(z[0]), len(z[1]), z[2]))
-        test2, test1, testlabels = map(list, zip(*sorted_test))
+        zipped_test = sorted(enumerate(zip(test2, test1, testlabels)),
+                             key=lambda z: (len(z[1][0]), len(z[1][1]), z[1][2]))
+        self.sorted_test_indices = [i for (i, z) in zipped_test]
+        test2 = [x for (i, (x, y, z)) in zipped_test]
+        test1 = [y for (i, (x, y, z)) in zipped_test]
+        testlabels = [z for (i, (x, y, z)) in zipped_test]
 
         self.samples = train1 + train2 + valid1 + valid2 + test1 + test2
         self.data = {'train': (train1, train2, trainlabels),
@@ -105,9 +112,14 @@ class SNLIEval(object):
         config['classifier'] = config_classifier
 
         clf = SplitClassifier(self.X, self.y, config)
-        devacc, testacc = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[self.sorted_test_indices[i]] = y
+
         logging.debug('Dev acc : {0} Test acc : {1} for SNLI\n'
                       .format(devacc, testacc))
         return {'devacc': devacc, 'acc': testacc,
                 'ndev': len(self.data['valid'][0]),
-                'ntest': len(self.data['test'][0])}
+                'ntest': len(self.data['test'][0]),
+                'yhat': yhat, 'metadata':self.metadata }

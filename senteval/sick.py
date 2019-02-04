@@ -29,6 +29,8 @@ class SICKRelatednessEval(object):
         train = self.loadFile(os.path.join(task_path, 'SICK_train.txt'))
         dev = self.loadFile(os.path.join(task_path, 'SICK_trial.txt'))
         test = self.loadFile(os.path.join(task_path, 'SICK_test_annotated.txt'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'SICK_test_annotated.txt')]
         self.sick_data = {'train': train, 'dev': dev, 'test': test}
 
     def do_prepare(self, params, prepare):
@@ -62,14 +64,15 @@ class SICKRelatednessEval(object):
         for key in self.sick_data:
             logging.info('Computing embedding for {0}'.format(key))
             # Sort to reduce padding
-            sorted_corpus = sorted(zip(self.sick_data[key]['X_A'],
-                                       self.sick_data[key]['X_B'],
-                                       self.sick_data[key]['y']),
-                                   key=lambda z: (len(z[0]), len(z[1]), z[2]))
-
-            self.sick_data[key]['X_A'] = [x for (x, y, z) in sorted_corpus]
-            self.sick_data[key]['X_B'] = [y for (x, y, z) in sorted_corpus]
-            self.sick_data[key]['y'] = [z for (x, y, z) in sorted_corpus]
+            zipped_corpus = sorted(enumerate(zip(self.sick_data[key]['X_A'],
+                                                 self.sick_data[key]['X_B'],
+                                                 self.sick_data[key]['y'])),
+                                key=lambda z: (len(z[1][0]), len(z[1][1]), z[1][2]))
+            if key == 'test':
+                sorted_test_indices = [i for (i, z) in zipped_corpus]
+            self.sick_data[key]['X_A'] = [x for (i, (x, y, z)) in zipped_corpus]
+            self.sick_data[key]['X_B'] = [y for (i, (x, y, z)) in zipped_corpus]
+            self.sick_data[key]['y'] = [z for (i, (x, y, z)) in zipped_corpus]
 
             for txt_type in ['X_A', 'X_B']:
                 sick_embed[key][txt_type] = []
@@ -106,7 +109,10 @@ class SICKRelatednessEval(object):
                                  devscores=self.sick_data['dev']['y'],
                                  config=config)
 
-        devpr, yhat = clf.run()
+        devpr, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y
 
         pr = pearsonr(yhat, self.sick_data['test']['y'])[0]
         sr = spearmanr(yhat, self.sick_data['test']['y'])[0]
@@ -118,7 +124,9 @@ class SICKRelatednessEval(object):
                        for SICK Relatedness\n'.format(pr, sr, se))
 
         return {'devpearson': devpr, 'pearson': pr, 'spearman': sr, 'mse': se,
-                'yhat': yhat, 'ndev': len(devA), 'ntest': len(testA)}
+                'yhat': yhat, 'ndev': len(devA),
+                'ntest': len(testA),
+                'metadata': self.metadata}
 
     def encode_labels(self, labels, nclass=5):
         """
@@ -141,6 +149,8 @@ class SICKEntailmentEval(SICKRelatednessEval):
         train = self.loadFile(os.path.join(task_path, 'SICK_train.txt'))
         dev = self.loadFile(os.path.join(task_path, 'SICK_trial.txt'))
         test = self.loadFile(os.path.join(task_path, 'SICK_test_annotated.txt'))
+        self.metadata = {}
+        self.metadata['test_files'] = [os.path.join(task_path, 'SICK_test_annotated.txt')]
         self.sick_data = {'train': train, 'dev': dev, 'test': test}
 
     def loadFile(self, fpath):
@@ -166,14 +176,15 @@ class SICKEntailmentEval(SICKRelatednessEval):
         for key in self.sick_data:
             logging.info('Computing embedding for {0}'.format(key))
             # Sort to reduce padding
-            sorted_corpus = sorted(zip(self.sick_data[key]['X_A'],
-                                       self.sick_data[key]['X_B'],
-                                       self.sick_data[key]['y']),
-                                   key=lambda z: (len(z[0]), len(z[1]), z[2]))
-
-            self.sick_data[key]['X_A'] = [x for (x, y, z) in sorted_corpus]
-            self.sick_data[key]['X_B'] = [y for (x, y, z) in sorted_corpus]
-            self.sick_data[key]['y'] = [z for (x, y, z) in sorted_corpus]
+            zipped_corpus = sorted(enumerate(zip(self.sick_data[key]['X_A'],
+                                                 self.sick_data[key]['X_B'],
+                                                 self.sick_data[key]['y'])),
+                                key=lambda z: (len(z[1][0]), len(z[1][1]), z[1][2]))
+            if key == 'test':
+                sorted_test_indices = [i for (i, z) in zipped_corpus]
+            self.sick_data[key]['X_A'] = [x for (i, (x, y, z)) in zipped_corpus]
+            self.sick_data[key]['X_B'] = [y for (i, (x, y, z)) in zipped_corpus]
+            self.sick_data[key]['y'] = [z for (i, (x, y, z)) in zipped_corpus]
 
             for txt_type in ['X_A', 'X_B']:
                 sick_embed[key][txt_type] = []
@@ -210,8 +221,13 @@ class SICKEntailmentEval(SICKRelatednessEval):
                               y={'train': trainY, 'valid': devY, 'test': testY},
                               config=config)
 
-        devacc, testacc = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y
+
         logging.debug('\nDev acc : {0} Test acc : {1} for \
                        SICK entailment\n'.format(devacc, testacc))
         return {'devacc': devacc, 'acc': testacc,
-                'ndev': len(devA), 'ntest': len(testA)}
+                'ndev': len(devA), 'ntest': len(testA),
+                'yhat': yhat, 'metadata': self.metadata}

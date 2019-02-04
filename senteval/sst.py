@@ -32,6 +32,8 @@ class SSTEval(object):
         train = self.loadFile(os.path.join(task_path, 'sentiment-train'))
         dev = self.loadFile(os.path.join(task_path, 'sentiment-dev'))
         test = self.loadFile(os.path.join(task_path, 'sentiment-test'))
+        self.metadata = {}
+        self.metadata['test_files'] = [ os.path.join(task_path, 'sentiment-test') ]
         self.sst_data = {'train': train, 'dev': dev, 'test': test}
 
     def do_prepare(self, params, prepare):
@@ -61,10 +63,13 @@ class SSTEval(object):
         for key in self.sst_data:
             logging.info('Computing embedding for {0}'.format(key))
             # Sort to reduce padding
-            sorted_data = sorted(zip(self.sst_data[key]['X'],
-                                     self.sst_data[key]['y']),
-                                 key=lambda z: (len(z[0]), z[1]))
-            self.sst_data[key]['X'], self.sst_data[key]['y'] = map(list, zip(*sorted_data))
+            zipped_data = sorted(enumerate(zip(self.sst_data[key]['X'],
+                                               self.sst_data[key]['y'])),
+                                     key=lambda z: (len(z[1][0]), z[1][1]))
+            if key == 'test':
+                sorted_test_indices = [i for (i, z) in zipped_data]
+            self.sst_data[key]['X'] = [x for (i, (x,y)) in zipped_data]
+            self.sst_data[key]['y'] = [y for (i, (x,y)) in zipped_data]
 
             sst_embed[key]['X'] = []
             for ii in range(0, len(self.sst_data[key]['y']), bsize):
@@ -87,10 +92,15 @@ class SSTEval(object):
                                  'test': sst_embed['test']['y']},
                               config=config_classifier)
 
-        devacc, testacc = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y
         logging.debug('\nDev acc : {0} Test acc : {1} for \
             SST {2} classification\n'.format(devacc, testacc, self.task_name))
 
         return {'devacc': devacc, 'acc': testacc,
                 'ndev': len(sst_embed['dev']['X']),
-                'ntest': len(sst_embed['test']['X'])}
+                'ntest': len(sst_embed['test']['X']),
+                'yhat' : yhat,
+                'metadata' : self.metadata }

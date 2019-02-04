@@ -24,6 +24,9 @@ class PROBINGEval(object):
     def __init__(self, task, task_path, seed=1111):
         self.seed = seed
         self.task = task
+        self.metadata = {}
+        self.metadata['test_files'] = [task_path]
+        self.metadata['desc'] = 'Only lines starting with \'te\''
         logging.debug('***** (Probing) Transfer task : %s classification *****', self.task.upper())
         self.task_data = {'train': {'X': [], 'y': []},
                           'dev': {'X': [], 'y': []},
@@ -60,10 +63,13 @@ class PROBINGEval(object):
         logging.info('Computing embeddings for train/dev/test')
         for key in self.task_data:
             # Sort to reduce padding
-            sorted_data = sorted(zip(self.task_data[key]['X'],
-                                     self.task_data[key]['y']),
-                                 key=lambda z: (len(z[0]), z[1]))
-            self.task_data[key]['X'], self.task_data[key]['y'] = map(list, zip(*sorted_data))
+            zipped_data = sorted(enumerate(zip(self.task_data[key]['X'],
+                                               self.task_data[key]['y'])),
+                                 key=lambda z: (len(z[1][0]), z[1][1]))
+            if key == 'test':
+                sorted_test_indices = [i for (i, z) in zipped_data]
+            self.task_data[key]['X'] = [x for (i, (x, y)) in zipped_data]
+            self.task_data[key]['y'] = [y for (i, (x, y)) in zipped_data]
 
             task_embed[key]['X'] = []
             for ii in range(0, len(self.task_data[key]['y']), bsize):
@@ -91,12 +97,17 @@ class PROBINGEval(object):
                                  'test': task_embed['test']['y']},
                               config=config_classifier)
 
-        devacc, testacc = clf.run()
+        devacc, testacc, yhat_sorted = clf.run()
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y
         logging.debug('\nDev acc : %.1f Test acc : %.1f for %s classification\n' % (devacc, testacc, self.task.upper()))
 
         return {'devacc': devacc, 'acc': testacc,
                 'ndev': len(task_embed['dev']['X']),
-                'ntest': len(task_embed['test']['X'])}
+                'ntest': len(task_embed['test']['X']),
+                'metadata': self.metadata,
+                'yhat': yhat}
 
 """
 Surface Information
