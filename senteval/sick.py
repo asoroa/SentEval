@@ -112,7 +112,7 @@ class SICKRelatednessEval(object):
         devpr, yhat_sorted = clf.run()
         yhat = [None] * len(yhat_sorted)
         for (i, y) in enumerate(yhat_sorted):
-            yhat[sorted_test_indices[i]] = y
+            yhat[sorted_test_indices[i]] = y.item()
 
         pr = pearsonr(yhat, self.sick_data['test']['y'])[0]
         sr = spearmanr(yhat, self.sick_data['test']['y'])[0]
