@@ -106,7 +106,7 @@ class MRPCEval(object):
         for (i, y) in enumerate(yhat_sorted):
             yhat[sorted_test_indices[i]] = y
 
-        testf1 = round(100*f1_score(testY, yhat), 2)
+        testf1 = round(100*f1_score(testY, yhat_sorted), 2)
         logging.debug('Dev acc : {0} Test acc {1}; Test F1 {2} for MRPC.\n'
                       .format(devacc, testacc, testf1))
         return {'devacc': devacc, 'acc': testacc, 'f1': testf1,

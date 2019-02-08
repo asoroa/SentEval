@@ -110,19 +110,19 @@ class SICKRelatednessEval(object):
                                  config=config)
 
         devpr, yhat_sorted = clf.run()
-        yhat = [None] * len(yhat_sorted)
-        for (i, y) in enumerate(yhat_sorted):
-            yhat[sorted_test_indices[i]] = y.item()
 
-        pr = pearsonr(yhat, self.sick_data['test']['y'])[0]
-        sr = spearmanr(yhat, self.sick_data['test']['y'])[0]
+        pr = pearsonr(yhat_sorted, self.sick_data['test']['y'])[0]
+        sr = spearmanr(yhat_sorted, self.sick_data['test']['y'])[0]
         pr = 0 if pr != pr else pr
         sr = 0 if sr != sr else sr
-        se = mean_squared_error(yhat, self.sick_data['test']['y'])
+        se = mean_squared_error(yhat_sorted, self.sick_data['test']['y'])
         logging.debug('Dev : Pearson {0}'.format(devpr))
         logging.debug('Test : Pearson {0} Spearman {1} MSE {2} \
                        for SICK Relatedness\n'.format(pr, sr, se))
 
+        yhat = [None] * len(yhat_sorted)
+        for (i, y) in enumerate(yhat_sorted):
+            yhat[sorted_test_indices[i]] = y.item()
         return {'devpearson': devpr, 'pearson': pr, 'spearman': sr, 'mse': se,
                 'yhat': yhat, 'ndev': len(devA),
                 'ntest': len(testA),
